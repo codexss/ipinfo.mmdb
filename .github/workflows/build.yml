@@ -33,16 +33,17 @@ jobs:
           go mod init mmdb-builder
           go mod tidy
           go run main.go
+          mkdir -p dist
+          mv Country.mmdb dist/
 
       - name: Get Current Date for Release
         run: |
           echo "SHORT_DATE=$(date +'%Y%m%d')" >> $GITHUB_ENV
 
-      - name: Upload to Release
-        uses: softprops/action-gh-release@v3
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v4
         with:
-          tag_name: latest
-          name: "${{ env.SHORT_DATE }}"
-          files: Country.mmdb
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./dist
+          publish_branch: gh-pages
+          keep_files: false
