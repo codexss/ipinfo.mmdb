@@ -23,10 +23,8 @@ jobs:
           cache: false
 
       - name: Download IPinfo CSV
-        env:
-          IPINFO_TOKEN: ${{ secrets.IPINFO_TOKEN }}
         run: |
-          curl -fsSL "https://ipinfo.io/data/ipinfo_lite.csv.gz?token=${IPINFO_TOKEN}" | zcat > ipinfo_lite.csv
+          curl -fsSL "https://ipinfo.io/data/ipinfo_lite.csv.gz?token=${{ secrets.IPINFO_TOKEN }}" | zcat > ipinfo_lite.csv
 
       - name: Init and Run Go Script
         run: |
