@@ -14,10 +14,10 @@ jobs:
     
     steps:
       - name: Checkout repository
-        uses: actions/checkout@latest
+        uses: actions/checkout@v6
 
       - name: Setup Go environment
-        uses: actions/setup-go@latest
+        uses: actions/setup-go@v6
         with:
           go-version: 'stable'
           cache: false
@@ -40,7 +40,7 @@ jobs:
           echo "SHORT_DATE=$(date +'%Y%m%d')" >> $GITHUB_ENV
 
       - name: Upload to Release
-        uses: softprops/action-gh-release@latest
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: latest
           name: "${{ env.SHORT_DATE }}"
