@@ -14,13 +14,13 @@ jobs:
     
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@latest
 
       - name: Setup Go environment
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@latest
         with:
           go-version: 'stable'
-          cache: true
+          cache: false
 
       - name: Download IPinfo CSV
         env:
@@ -31,27 +31,19 @@ jobs:
 
       - name: Init and Run Go Script
         run: |
-          # 如果你的仓库还没有 go.mod，它会自动初始化
-          if [ ! -f "go.mod" ]; then
-            go mod init mmdb-builder
-          fi
+          go mod init mmdb-builder
           go mod tidy
           go run main.go
 
       - name: Get Current Date for Release
         run: |
-          echo "BUILD_TIME=$(date +'%Y-%m-%d %H:%M:%S')" >> $GITHUB_ENV
-          echo "SHORT_DATE=$(date +'%Y-%m-%d')" >> $GITHUB_ENV
+          echo "SHORT_DATE=$(date +'%Y%m%d')" >> $GITHUB_ENV
 
       - name: Upload to Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@latest
         with:
           tag_name: latest
-          name: "IP Database Update (${{ env.SHORT_DATE }})"
-          body: |
-            自动拉取最新 CSV 数据并构建的 MMDB 文件。
-            
-            **构建时间**: ${{ env.BUILD_TIME }}
+          name: "${{ env.SHORT_DATE }}"
           files: Country.mmdb
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
