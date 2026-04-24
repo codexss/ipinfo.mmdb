@@ -1,4 +1,4 @@
-name: Auto Update MMDB Database
+name: Update MMDB Database
 
 on:
   schedule:
