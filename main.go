@@ -32,7 +32,12 @@ type countryRange struct {
 	start netip.Addr
 	end   netip.Addr
 	code  string
-	name  string
+}
+
+type columnIndexes struct {
+	network     int
+	country     int
+	countryCode int
 }
 
 // countryKeyGenerator avoids hashing the same small country record for every range.
@@ -58,6 +63,7 @@ func main() {
 	flag.Usage = func() {
 		fmt.Fprintf(flag.CommandLine.Output(), "Usage: %s [input.csv] [output.mmdb]\n", filepath.Base(os.Args[0]))
 		fmt.Fprintln(flag.CommandLine.Output(), "Convert IPinfo Lite CSV to a country-only GeoIP2 MMDB file.")
+		fmt.Fprintln(flag.CommandLine.Output(), "Use - as the input path to read CSV data from stdin.")
 		flag.PrintDefaults()
 	}
 	flag.Parse()
@@ -90,12 +96,19 @@ func main() {
 }
 
 func convert(inputPath, outputPath string, progress io.Writer) (stats, error) {
+	if inputPath == "-" {
+		return convertReader(os.Stdin, outputPath, progress)
+	}
+
 	input, err := os.Open(inputPath)
 	if err != nil {
 		return stats{}, fmt.Errorf("opening input: %w", err)
 	}
 	defer input.Close()
+	return convertReader(input, outputPath, progress)
+}
 
+func convertReader(input io.Reader, outputPath string, progress io.Writer) (stats, error) {
 	tree, result, err := buildTree(input, progress)
 	if err != nil {
 		return stats{}, err
@@ -135,16 +148,17 @@ func buildTree(input io.Reader, progress io.Writer) (*mmdbwriter.Tree, stats, er
 	}
 
 	countries := make(map[string]string, 256)
+	records := make(map[string]mmdbtype.Map, 256)
 	result := stats{}
-	var current *countryRange
+	var current countryRange
+	hasCurrent := false
 	var previousEnd netip.Addr
 
 	flush := func() error {
-		if current == nil {
+		if !hasCurrent {
 			return nil
 		}
-		record := countryRecord(current.code, current.name)
-		if err := tree.InsertRange(toNetIP(current.start), toNetIP(current.end), record); err != nil {
+		if err := tree.InsertRange(toNetIP(current.start), toNetIP(current.end), records[current.code]); err != nil {
 			return fmt.Errorf("inserting range %s-%s: %w", current.start, current.end, err)
 		}
 		result.MergedRanges++
@@ -160,9 +174,9 @@ func buildTree(input io.Reader, progress io.Writer) (*mmdbwriter.Tree, stats, er
 			return nil, stats{}, fmt.Errorf("reading CSV near line %d: %w", line, readErr)
 		}
 
-		networkText := strings.TrimSpace(row[columns["network"]])
-		countryName := strings.TrimSpace(row[columns["country"]])
-		countryCode := strings.TrimSpace(row[columns["country_code"]])
+		networkText := strings.TrimSpace(row[columns.network])
+		countryName := strings.TrimSpace(row[columns.country])
+		countryCode := strings.TrimSpace(row[columns.countryCode])
 		if networkText == "" || countryName == "" || !validCountryCode(countryCode) {
 			return nil, stats{}, fmt.Errorf("line %d: invalid network or country fields", line)
 		}
@@ -177,7 +191,10 @@ func buildTree(input io.Reader, progress io.Writer) (*mmdbwriter.Tree, stats, er
 				countryName,
 			)
 		}
-		countries[countryCode] = countryName
+		if !exists {
+			countries[countryCode] = countryName
+			records[countryCode] = countryRecord(countryCode, countryName)
+		}
 
 		prefix, parseErr := parseNetwork(networkText)
 		if parseErr != nil {
@@ -195,13 +212,14 @@ func buildTree(input io.Reader, progress io.Writer) (*mmdbwriter.Tree, stats, er
 			)
 		}
 
-		if current != nil && current.code == countryCode && current.name == countryName && current.end.Next() == start {
+		if hasCurrent && current.code == countryCode && current.end.Next() == start {
 			current.end = end
 		} else {
 			if err := flush(); err != nil {
 				return nil, stats{}, err
 			}
-			current = &countryRange{start: start, end: end, code: countryCode, name: countryName}
+			current = countryRange{start: start, end: end, code: countryCode}
+			hasCurrent = true
 		}
 
 		previousEnd = end
@@ -232,23 +250,32 @@ func parseNetwork(value string) (netip.Prefix, error) {
 	return netip.PrefixFrom(addr, addr.BitLen()), nil
 }
 
-func requiredColumns(header []string) (map[string]int, error) {
-	required := map[string]int{"network": -1, "country": -1, "country_code": -1}
+func requiredColumns(header []string) (columnIndexes, error) {
+	columns := columnIndexes{network: -1, country: -1, countryCode: -1}
 	for index, name := range header {
-		if _, ok := required[name]; ok {
-			required[name] = index
+		switch name {
+		case "network":
+			columns.network = index
+		case "country":
+			columns.country = index
+		case "country_code":
+			columns.countryCode = index
 		}
 	}
 	var missing []string
-	for name, index := range required {
-		if index == -1 {
-			missing = append(missing, name)
-		}
+	if columns.network == -1 {
+		missing = append(missing, "network")
+	}
+	if columns.country == -1 {
+		missing = append(missing, "country")
+	}
+	if columns.countryCode == -1 {
+		missing = append(missing, "country_code")
 	}
 	if len(missing) > 0 {
-		return nil, fmt.Errorf("CSV is missing required columns: %s", strings.Join(missing, ", "))
+		return columnIndexes{}, fmt.Errorf("CSV is missing required columns: %s", strings.Join(missing, ", "))
 	}
-	return required, nil
+	return columns, nil
 }
 
 func validCountryCode(code string) bool {
@@ -319,6 +346,10 @@ func writeAtomically(tree *mmdbwriter.Tree, outputPath string) error {
 	if _, err := tree.WriteTo(temporary); err != nil {
 		temporary.Close()
 		return fmt.Errorf("writing MMDB: %w", err)
+	}
+	if err := temporary.Chmod(0o644); err != nil {
+		temporary.Close()
+		return fmt.Errorf("setting MMDB permissions: %w", err)
 	}
 	if err := temporary.Sync(); err != nil {
 		temporary.Close()

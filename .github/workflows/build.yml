@@ -21,32 +21,44 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
 
       - name: Set up Go
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
           go-version-file: go.mod
           cache: true
 
-      - name: Download IPinfo CSV
+      - name: Test and build country database
         env:
           IPINFO_TOKEN: ${{ secrets.IPINFO_TOKEN }}
         run: |
+          go test ./...
+          go build -o ipinfo-country-mmdb .
           curl --fail --silent --show-error --location --retry 3 \
             "https://ipinfo.io/data/ipinfo_lite.csv.gz?token=${IPINFO_TOKEN}" \
-            | gzip --decompress --stdout > ipinfo_lite.csv
-          test -s ipinfo_lite.csv
-
-      - name: Build country database
-        run: |
-          go test ./...
-          go run . ipinfo_lite.csv ipinfo_country.mmdb
+            | gzip --decompress --stdout \
+            | ./ipinfo-country-mmdb - ipinfo_country.mmdb
           test -s ipinfo_country.mmdb
           echo "TAG_NAME=$(date -u '+%Y.%m.%d')" >> "$GITHUB_ENV"
 
+      - name: Check daily release
+        id: release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if gh release view "$TAG_NAME" > /dev/null 2>&1; then
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+            echo "Release $TAG_NAME already exists; keeping it unchanged."
+          else
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Upload release
-        uses: softprops/action-gh-release@v3
+        if: steps.release.outputs.publish == 'true'
+        uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228 # v3
         with:
           tag_name: ${{ env.TAG_NAME }}
           name: ${{ env.TAG_NAME }}
@@ -56,17 +68,17 @@ jobs:
           files: ipinfo_country.mmdb
 
       - name: Remove old releases
+        if: steps.release.outputs.publish == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           gh release list --limit 100 --json tagName,createdAt \
-            --jq 'sort_by(.createdAt) | reverse | .[2:] | .[].tagName' |
+            --jq 'map(select(.tagName | test("^[0-9]{4}\\.[0-9]{2}\\.[0-9]{2}$"))) | sort_by(.createdAt) | reverse | .[2:] | .[].tagName' |
             while read -r tag; do
               gh release delete "$tag" --cleanup-tag --yes
             done
 
       - name: Delete old workflow runs
-        if: always()
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
