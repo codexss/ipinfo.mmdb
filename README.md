@@ -2,6 +2,10 @@
 
 Convert the IPinfo Lite CSV database to a country-only MaxMind DB file.
 
+## Download
+
+- [Download the latest `ipinfo_country.mmdb`](https://github.com/codexss/ipinfo.mmdb/releases/latest/download/ipinfo_country.mmdb)
+
 The converter uses MaxMind's official Go writer and emits records in this form:
 
 ```json
