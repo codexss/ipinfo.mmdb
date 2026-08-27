@@ -1,0 +1,80 @@
+name: GeoIP Updater
+
+on:
+  repository_dispatch:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 1 * * *"
+
+permissions:
+  actions: write
+  contents: write
+
+concurrency:
+  group: geoip-updater
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Download IPinfo CSV
+        env:
+          IPINFO_TOKEN: ${{ secrets.IPINFO_TOKEN }}
+        run: |
+          curl --fail --silent --show-error --location --retry 3 \
+            "https://ipinfo.io/data/ipinfo_lite.csv.gz?token=${IPINFO_TOKEN}" \
+            | gzip --decompress --stdout > ipinfo_lite.csv
+          test -s ipinfo_lite.csv
+
+      - name: Build country database
+        run: |
+          go test ./...
+          go run . ipinfo_lite.csv ipinfo_country.mmdb
+          test -s ipinfo_country.mmdb
+          sha256sum ipinfo_country.mmdb > ipinfo_country.mmdb.sha256.txt
+          echo "TAG_NAME=$(date -u '+%Y.%m.%d')" >> "$GITHUB_ENV"
+
+      - name: Upload release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.TAG_NAME }}
+          name: ${{ env.TAG_NAME }}
+          body: ${{ env.TAG_NAME }}
+          make_latest: true
+          fail_on_unmatched_files: true
+          files: |
+            ipinfo_country.mmdb
+            ipinfo_country.mmdb.sha256.txt
+
+      - name: Remove old releases
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release list --limit 100 --json tagName,createdAt \
+            --jq 'sort_by(.createdAt) | reverse | .[2:] | .[].tagName' |
+            while read -r tag; do
+              gh release delete "$tag" --cleanup-tag --yes
+            done
+
+      - name: Delete old workflow runs
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh run list --workflow build.yml --limit 100 --json databaseId \
+            --jq 'map(select(.databaseId != ${{ github.run_id }})) | .[1:] | .[].databaseId' |
+            while read -r run_id; do
+              gh api "repos/${{ github.repository }}/actions/runs/${run_id}" --method DELETE
+            done
