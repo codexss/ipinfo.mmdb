@@ -46,7 +46,7 @@ jobs:
           echo "TAG_NAME=$(date -u '+%Y.%m.%d')" >> "$GITHUB_ENV"
 
       - name: Upload release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v6
         with:
           tag_name: ${{ env.TAG_NAME }}
           name: ${{ env.TAG_NAME }}
