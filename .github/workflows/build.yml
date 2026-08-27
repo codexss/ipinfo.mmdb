@@ -43,7 +43,6 @@ jobs:
           go test ./...
           go run . ipinfo_lite.csv ipinfo_country.mmdb
           test -s ipinfo_country.mmdb
-          sha256sum ipinfo_country.mmdb > ipinfo_country.mmdb.sha256.txt
           echo "TAG_NAME=$(date -u '+%Y.%m.%d')" >> "$GITHUB_ENV"
 
       - name: Upload release
@@ -54,9 +53,7 @@ jobs:
           body: ${{ env.TAG_NAME }}
           make_latest: true
           fail_on_unmatched_files: true
-          files: |
-            ipinfo_country.mmdb
-            ipinfo_country.mmdb.sha256.txt
+          files: ipinfo_country.mmdb
 
       - name: Remove old releases
         env:
