@@ -1,12 +1,16 @@
 # IPinfo Country MMDB
 
-Convert the IPinfo Lite CSV database to a country-only MaxMind DB file.
+Convert IPinfo Lite CSV to MaxMind (.mmdb) Country Database
 
 ## Download
 
-### URL
+### URL1
 
 - [ipinfo_country.mmdb](https://github.com/codexss/ipinfo.mmdb/releases/latest/download/ipinfo_country.mmdb)
+
+### URL2
+
+- [ipinfo_country.mmdb](https://github.com/codexss/ipinfo.mmdb/raw/download/ipinfo_country.mmdb)
 
 ## License
 
