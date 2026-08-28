@@ -20,13 +20,12 @@ jobs:
     timeout-minutes: 15
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-        with:
-          persist-credentials: false
+      - name: Clone Repository
+        run: |
+          git clone https://${{ github.actor }}:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }} .
 
       - name: Set up Go
-        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
           cache: true
@@ -44,31 +43,25 @@ jobs:
           test -s ipinfo_country.mmdb
           echo "TAG_NAME=$(date -u '+%Y.%m.%d')" >> "$GITHUB_ENV"
 
-      - name: Check daily release
-        id: release
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Push to "download" branch
         run: |
-          if gh release view "$TAG_NAME" > /dev/null 2>&1; then
-            echo "publish=false" >> "$GITHUB_OUTPUT"
-            echo "Release $TAG_NAME already exists; keeping it unchanged."
-          else
-            echo "publish=true" >> "$GITHUB_OUTPUT"
-          fi
+          git init
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git checkout -b download
+          git add ipinfo_country.mmdb
+          git commit -m "${{ env.TAG_NAME }}"
+          git remote add origin "https://${{ github.actor }}:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}"
+          git push -f origin download
 
       - name: Upload release
-        if: steps.release.outputs.publish == 'true'
-        uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228 # v3
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ env.TAG_NAME }}
-          name: ${{ env.TAG_NAME }}
           body: ${{ env.TAG_NAME }}
-          make_latest: true
-          fail_on_unmatched_files: true
           files: ipinfo_country.mmdb
 
       - name: Remove old releases
-        if: steps.release.outputs.publish == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
