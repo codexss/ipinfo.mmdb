@@ -51,7 +51,7 @@ jobs:
           git checkout -b download
           git add ipinfo_country.mmdb
           git commit -m "${{ env.TAG_NAME }}"
-          git remote add origin "https://${{ github.actor }}:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}"
+          git remote set-url origin "https://${{ github.actor }}:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}"
           git push -f origin download
 
       - name: Upload release
