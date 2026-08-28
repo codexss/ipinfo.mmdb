@@ -41,17 +41,20 @@ jobs:
             | gzip --decompress --stdout \
             | ./ipinfo-country-mmdb - ipinfo_country.mmdb
           test -s ipinfo_country.mmdb
+          mkdir -p upload
+          cp *.mmdb upload
           echo "TAG_NAME=$(date -u '+%Y.%m.%d')" >> "$GITHUB_ENV"
 
       - name: Push to "download" branch
         run: |
+          cd upload
           git init
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
           git checkout -b download
           git add ipinfo_country.mmdb
           git commit -m "${{ env.TAG_NAME }}"
-          git remote set-url origin "https://${{ github.actor }}:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}"
+          git remote add origin "https://${{ github.actor }}:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}"
           git push -f origin download
 
       - name: Upload release
@@ -59,7 +62,7 @@ jobs:
         with:
           tag_name: ${{ env.TAG_NAME }}
           body: ${{ env.TAG_NAME }}
-          files: ipinfo_country.mmdb
+          files: upload/*.mmdb
 
       - name: Remove old releases
         env:
