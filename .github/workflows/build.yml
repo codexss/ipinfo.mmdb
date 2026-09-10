@@ -66,15 +66,13 @@ jobs:
           body: ${{ env.TAG_NAME }}
           files: upload/*.mmdb
 
-      - name: Remove old releases
+      - name: Remove old Releases
+        uses: dev-drprasad/delete-older-releases@master
+        with:
+          keep_latest: 2
+          delete_tags: true
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          gh release list --limit 100 --json tagName,createdAt \
-            --jq 'map(select(.tagName | test("^[0-9]{4}\\.[0-9]{2}\\.[0-9]{2}$"))) | sort_by(.createdAt) | reverse | .[2:] | .[].tagName' |
-            while read -r tag; do
-              gh release delete "$tag" --cleanup-tag --yes
-            done
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Delete old workflow runs
         env:
